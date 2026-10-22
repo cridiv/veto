@@ -7,6 +7,12 @@
     "build": "pnpm -r run build",
     "clean": "pnpm -r run clean"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "unrs-resolver"
+    ]
+  },
   "devDependencies": {
     "typescript": "^5.7.3"
   }

@@ -1,2 +1,2 @@
-// Shared contracts placeholder - types and schemas will be added here
-export {};
+export * from "./types.js";
+export * from "./schemas.js";
