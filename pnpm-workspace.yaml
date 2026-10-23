@@ -4,6 +4,13 @@ packages:
   - "sdks/*"
   - "apps/*"
   - "evals"
+
 allowBuilds:
-  '@parcel/watcher': set this to true or false
-  unrs-resolver: set this to true or false
+  '@parcel/watcher': true
+  unrs-resolver: true
+  better-sqlite3: true
+
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - 'unrs-resolver'
+  - 'better-sqlite3'
