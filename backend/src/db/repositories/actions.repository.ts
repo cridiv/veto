@@ -17,6 +17,11 @@ export class ActionsRepository {
   }
 
   insert(request: ActionRequest, decision: Decision): void {
+    // NOTE: created_at is set by the server, NOT taken from request.timestamp.
+    // Using client-provided timestamps would allow agents to backdate calls
+    // and evade quota sliding-window checks.
+    const serverNow = new Date().toISOString();
+
     const stmt = this.db.prepare(`
       INSERT INTO actions (
         id, agent_id, session_id, user_goal, tool, args, source, untrusted,
@@ -43,9 +48,10 @@ export class ActionsRepository {
       decision.judge ? (decision.judge.aligned ? 1 : 0) : null,
       decision.judge?.confidence ?? null,
       decision.judge?.explanation ?? null,
-      request.timestamp,
+      serverNow,
     );
   }
+
 
   findById(id: string): any {
     const stmt = this.db.prepare('SELECT * FROM actions WHERE id = ?');

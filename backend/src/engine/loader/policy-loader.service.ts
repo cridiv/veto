@@ -90,8 +90,8 @@ export class PolicyLoaderService implements OnModuleInit {
   /**
    * Resolves the policy file path in order:
    * 1. process.env.VETO_POLICY_PATH
-   * 2. veto/policy.yaml (if exists in root)
-   * 3. veto/policy.example.yaml (fallback)
+   * 2. veto/veto-policy.yaml (workspace root)
+   * 3. veto/policy.yaml (fallback)
    */
   private resolvePolicyPath(): string {
     if (process.env.VETO_POLICY_PATH) {
@@ -100,16 +100,16 @@ export class PolicyLoaderService implements OnModuleInit {
 
     // Check workspace root
     const rootDir = path.resolve(process.cwd(), '..');
+    const rootVetoPolicy = path.resolve(rootDir, 'veto-policy.yaml');
+    if (fs.existsSync(rootVetoPolicy)) return rootVetoPolicy;
+
     const rootPolicy = path.resolve(rootDir, 'policy.yaml');
     if (fs.existsSync(rootPolicy)) return rootPolicy;
 
-    const rootExample = path.resolve(rootDir, 'policy.example.yaml');
-    if (fs.existsSync(rootExample)) return rootExample;
+    // Check current directory
+    const localVetoPolicy = path.resolve(process.cwd(), 'veto-policy.yaml');
+    if (fs.existsSync(localVetoPolicy)) return localVetoPolicy;
 
-    // Check backend directory
-    const localPolicy = path.resolve(process.cwd(), 'policy.yaml');
-    if (fs.existsSync(localPolicy)) return localPolicy;
-
-    return path.resolve(process.cwd(), 'policy.example.yaml');
+    return path.resolve(process.cwd(), 'policy.yaml');
   }
 }

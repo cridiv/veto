@@ -18,6 +18,7 @@ import {
 import { ActionsRepository } from '../db/repositories/actions.repository';
 import { ApprovalsRepository } from '../db/repositories/approvals.repository';
 import { StatsRepository } from '../db/repositories/stats.repository';
+import { PolicyEngineService } from '../engine/engine.service';
 
 export type FirewallEvent = {
   type: 'action_checked' | 'approval_created' | 'approval_resolved' | 'mode_changed';
@@ -35,6 +36,7 @@ export class FirewallService {
     private readonly actionsRepo: ActionsRepository,
     private readonly approvalsRepo: ApprovalsRepository,
     private readonly statsRepo: StatsRepository,
+    private readonly engine: PolicyEngineService,
   ) {}
 
   /**
@@ -50,7 +52,7 @@ export class FirewallService {
 
     const request: ActionRequest = parseResult.data;
 
-    // 1. If firewall is disabled, immediately allow with layer "off" and log it
+    // 1. Firewall OFF — bypass the engine
     if (!this.enabled) {
       const decision: Decision = {
         requestId: request.id,
@@ -59,19 +61,26 @@ export class FirewallService {
         layer: 'off',
         riskScore: 0.0,
       };
-
       this.recordAndEmit(request, decision);
       return decision;
     }
 
-    // 2. Baseline evaluation (Pass-through allow until Rule Engine & Judge are wired)
-    const decision: Decision = {
-      requestId: request.id,
-      verdict: 'allow',
-      reason: 'Action passed baseline security checks.',
-      layer: 'rule',
-      riskScore: 0.0,
-    };
+    // 2. Run the policy engine (rule → quota → action)
+    const decision = this.engine.evaluate(request);
+
+    // 3. If escalated, open an approval queue item
+    if (decision.verdict === 'needs_approval') {
+      const approval = this.approvalsRepo.create({
+        requestId: request.id,
+        agentId: request.agentId,
+        tool: request.tool,
+        args: request.args,
+        userGoal: request.userGoal,
+        reason: decision.reason,
+      });
+      decision.approvalId = approval.id;
+      this.emitEvent('approval_created', approval);
+    }
 
     this.recordAndEmit(request, decision);
     return decision;

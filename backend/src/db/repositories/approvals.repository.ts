@@ -1,6 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database.service';
 import type { Approval, ApprovalState } from '@veto/contracts';
+import { randomUUID } from 'crypto';
+
+type CreateApprovalPayload = {
+  requestId: string;
+  agentId: string;
+  tool: string;
+  args: Record<string, unknown>;
+  userGoal: string;
+  reason: string;
+};
+
 
 @Injectable()
 export class ApprovalsRepository {
@@ -10,7 +21,19 @@ export class ApprovalsRepository {
     return this.dbService.connection;
   }
 
-  create(approval: Approval): void {
+  create(payload: CreateApprovalPayload): Approval {
+    const approval: Approval = {
+      id: randomUUID(),
+      requestId: payload.requestId,
+      agentId: payload.agentId,
+      tool: payload.tool,
+      args: payload.args,
+      userGoal: payload.userGoal,
+      reason: payload.reason,
+      state: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
     const stmt = this.db.prepare(`
       INSERT INTO approvals (
         id, request_id, agent_id, tool, args, user_goal, reason, state, created_at, resolved_at
@@ -29,6 +52,8 @@ export class ApprovalsRepository {
       approval.createdAt,
       approval.resolvedAt ?? null,
     );
+
+    return approval;
   }
 
   findById(id: string): Approval | null {

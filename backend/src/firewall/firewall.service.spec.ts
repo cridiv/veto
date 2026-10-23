@@ -4,13 +4,17 @@ import { FirewallService } from './firewall.service';
 import { ActionsRepository } from '../db/repositories/actions.repository';
 import { ApprovalsRepository } from '../db/repositories/approvals.repository';
 import { StatsRepository } from '../db/repositories/stats.repository';
+import { PolicyEngineService } from '../engine/engine.service';
 import type { ActionRequest, Approval } from '@veto/contracts';
+
 
 describe('FirewallService', () => {
   let service: FirewallService;
   let mockActionsRepo: Partial<ActionsRepository>;
   let mockApprovalsRepo: Partial<ApprovalsRepository>;
   let mockStatsRepo: Partial<StatsRepository>;
+  let mockEngine: Partial<PolicyEngineService>;
+
 
   const validActionRequest: ActionRequest = {
     id: 'req-test-1',
@@ -44,12 +48,23 @@ describe('FirewallService', () => {
       }),
     };
 
+    mockEngine = {
+      evaluate: jest.fn().mockImplementation((req: ActionRequest) => ({
+        requestId: req.id,
+        verdict: 'allow',
+        reason: 'Mock engine: action permitted.',
+        layer: 'rule',
+        riskScore: 0.0,
+      })),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FirewallService,
         { provide: ActionsRepository, useValue: mockActionsRepo },
         { provide: ApprovalsRepository, useValue: mockApprovalsRepo },
         { provide: StatsRepository, useValue: mockStatsRepo },
+        { provide: PolicyEngineService, useValue: mockEngine },
       ],
     }).compile();
 

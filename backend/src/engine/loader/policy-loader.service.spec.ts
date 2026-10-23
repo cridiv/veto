@@ -13,8 +13,8 @@ describe('PolicyLoaderService', () => {
     service = module.get<PolicyLoaderService>(PolicyLoaderService);
   });
 
-  it('loads and validates policy.example.yaml from disk', () => {
-    process.env.VETO_POLICY_PATH = path.resolve(process.cwd(), '../policy.example.yaml');
+  it('loads and validates veto-policy.yaml from disk', () => {
+    process.env.VETO_POLICY_PATH = path.resolve(process.cwd(), '../veto-policy.yaml');
     const config = service.loadPolicy();
 
     expect(config.policies.length).toBeGreaterThan(0);

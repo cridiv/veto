@@ -140,30 +140,29 @@ describe('Database Repositories & QuotaEngine', () => {
       reason: 'Exceeded 100k quota',
       layer: 'quota',
       riskScore: 0.8,
-      approvalId: 'appr-1',
     });
 
-    approvalsRepo.create({
-      id: 'appr-1',
+    const created = approvalsRepo.create({
       requestId: 'req-appr-1',
       agentId: 'test-agent',
       tool: 'transfer_money',
       args: { amount: 20000 },
       userGoal: 'Send money',
       reason: 'Exceeded 100k quota',
-      state: 'pending',
-      createdAt: new Date().toISOString(),
     });
 
-    const pendingList = approvalsRepo.findPending();
-    expect(pendingList.some((a) => a.id === 'appr-1')).toBe(true);
+    expect(created.id).toBeDefined();
+    expect(created.state).toBe('pending');
 
-    const resolved = approvalsRepo.resolve('appr-1', 'approve');
+    const pendingList = approvalsRepo.findPending();
+    expect(pendingList.some((a) => a.id === created.id)).toBe(true);
+
+    const resolved = approvalsRepo.resolve(created.id, 'approve');
     expect(resolved?.state).toBe('approved');
     expect(resolved?.resolvedAt).toBeDefined();
 
     const pendingAfter = approvalsRepo.findPending();
-    expect(pendingAfter.some((a) => a.id === 'appr-1')).toBe(false);
+    expect(pendingAfter.some((a) => a.id === created.id)).toBe(false);
   });
 
   it('StatsRepository: calculates dashboard metrics and layer breakdowns', () => {
