@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import DatabaseConstructor, { Database } from 'better-sqlite3';
 import * as path from 'path';
-import { SCHEMA_SQL } from './schema';
+import { SCHEMA_SQL } from './schema/schema';
 
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {

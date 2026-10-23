@@ -1,0 +1,80 @@
+# ------------------------------------------------------------------------------
+# Veto Security Policies Reference
+# Top-to-bottom evaluation. First match wins.
+# ------------------------------------------------------------------------------
+
+context:
+  # Optional whitelist of verified transfer recipients
+  known_recipients:
+    - "PHCN"
+    - "Supplier Ltd"
+    - "Amazon Web Services"
+
+policies:
+
+  # 1. Allow read-only operations for all agents
+  - name: allow-read-tools
+    description: "Allow read queries with zero friction"
+    match:
+      agents: ["*"]
+      tools:
+        - read_inbox
+        - read_file
+        - list_files
+    action: allow
+
+  # 2. Hourly spending cap for Acme Assistant
+  - name: acme-hourly-transfer-cap
+    description: "Limit cumulative transfers to ₦300,000 per hour"
+    match:
+      agents: [acme-assistant]
+      tools: [transfer_money]
+    quota:
+      window: 1h
+      sum: args.amount
+      max: 300000
+    action: require_approval
+
+  # 3. Require human approval on large single transfers
+  - name: acme-large-transfers
+    description: "Require approval for single transfers exceeding ₦100,000"
+    match:
+      agents: [acme-assistant]
+      tools: [transfer_money]
+    when: "args.amount > 100000"
+    action: require_approval
+
+  # 4. Require approval for new / unverified recipients
+  - name: acme-unverified-recipients
+    description: "Require approval when sending funds to unlisted accounts"
+    match:
+      agents: [acme-assistant]
+      tools: [transfer_money]
+    when: "args.to not in context.known_recipients"
+    action: require_approval
+
+  # 5. Prevent file deletions outside sandbox
+  - name: block-sandbox-escape-deletion
+    description: "Prevent destructive file deletions outside permitted workspace"
+    match:
+      tools: [delete_files]
+    when: 'not args.path startswith "/workspace/"'
+    action: block
+
+  # 6. Rate-limit file deletions for DevOps bot
+  - name: devops-deletion-rate-limit
+    description: "Limit deletions to at most 3 calls per 10 minutes"
+    match:
+      agents: [devops-bot]
+      tools: [delete_files]
+    quota:
+      window: 10m
+      count: 3
+    action: block
+
+  # 7. Fallback: Unsettled side-effecting actions go to the LLM judge
+  - name: default-unmatched-actions
+    description: "Route unmatched tools to the LLM Intent Judge"
+    match:
+      tools: ["*"]
+    action: judge

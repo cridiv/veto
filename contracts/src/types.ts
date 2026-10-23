@@ -1,4 +1,4 @@
-export type ActionSource = "agent" | "human";
+export type ActionSource = 'agent' | 'human';
 
 export type UntrustedContent = {
   source: string;
@@ -17,16 +17,16 @@ export type ActionRequest = {
   timestamp: string;
 };
 
-export type DecisionVerdict = "allow" | "block" | "needs_approval";
+export type DecisionVerdict = 'allow' | 'block' | 'needs_approval';
 
 export type DecisionLayer =
-  | "rule"
-  | "quota"
-  | "risk"
-  | "taint"
-  | "judge"
-  | "timeout"
-  | "off";
+  | 'rule'
+  | 'quota'
+  | 'risk'
+  | 'taint'
+  | 'judge'
+  | 'timeout'
+  | 'off';
 
 export type JudgeResult = {
   aligned: boolean;
@@ -45,7 +45,7 @@ export type Decision = {
   judge?: JudgeResult;
 };
 
-export type ApprovalState = "pending" | "approved" | "denied";
+export type ApprovalState = 'pending' | 'approved' | 'denied';
 
 export type Approval = {
   id: string;
@@ -60,44 +60,53 @@ export type Approval = {
   resolvedAt?: string;
 };
 
-export type QuotaAction = "block" | "require_approval";
+// --- DECLARATIVE POLICY SCHEMA ---
 
-export type QuotaRule = {
-  id: string;
-  tool: string;
-  window: string; // e.g. "10s", "5m", "1h", "24h"
-  over: QuotaAction;
-  count?: number; // frequency limit (call count in window)
-  sum?: string;   // numerical argument property path (e.g. "args.amount", "args.bytes")
-  max?: number;   // cumulative threshold when using sum
+export type PolicyAction = 'allow' | 'block' | 'require_approval' | 'judge';
+
+export type PolicyMatch = {
+  agents?: string[]; // Defaults to ["*"] if omitted
+  tools: string[];   // e.g. ["transfer_money"] or ["read_inbox", "read_file"]
 };
 
-export type PolicyRuleAction = "allow" | "block" | "require_approval";
+export type PolicyQuota = {
+  window: string;    // e.g. "1h", "10m", "24h"
+  count?: number;    // Frequency limit (call count in window)
+  sum?: string;      // Argument property path (e.g. "args.amount")
+  max?: number;      // Cumulative ceiling for sum
+};
 
 export type PolicyRule = {
-  id: string;
-  tool: string | string[];
-  when?: string;
-  action: PolicyRuleAction;
-};
-
-export type AgentPolicy = {
-  context?: {
-    company_domain?: string;
-    known_recipients?: string[];
-    [key: string]: unknown;
-  };
-  default?: "judge" | "allow" | "block";
-  quotas?: QuotaRule[];
-  rules?: PolicyRule[];
+  name: string;
+  description?: string;
+  match: PolicyMatch;
+  when?: string;     // Boolean expression e.g. "args.amount > 100000"
+  quota?: PolicyQuota;
+  action: PolicyAction;
 };
 
 export type PolicyConfig = {
-  agents: Record<string, AgentPolicy>;
+  context?: {
+    known_recipients?: string[];
+    [key: string]: unknown;
+  };
+  policies: PolicyRule[];
+};
+
+// Database quota compatibility helper
+export type QuotaAction = 'block' | 'require_approval';
+export type QuotaRule = {
+  id: string;
+  tool: string;
+  window: string;
+  over: QuotaAction;
+  count?: number;
+  sum?: string;
+  max?: number;
 };
 
 export type ResolveApprovalRequest = {
-  decision: "approve" | "deny";
+  decision: 'approve' | 'deny';
 };
 
 export type ToggleModeRequest = {

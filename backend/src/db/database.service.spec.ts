@@ -3,7 +3,7 @@ import { DatabaseService } from './database.service';
 import { ActionsRepository } from './repositories/actions.repository';
 import { ApprovalsRepository } from './repositories/approvals.repository';
 import { StatsRepository } from './repositories/stats.repository';
-import { checkQuota } from './quota-evaluator';
+import { checkQuota } from './evaluators/quota-evaluator';
 import type { ActionRequest, Decision, QuotaRule } from '@veto/contracts';
 import * as fs from 'fs';
 import * as path from 'path';
