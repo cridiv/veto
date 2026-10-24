@@ -1,11 +1,13 @@
 import * as crypto from 'crypto';
-import type {
-  ActionRequest,
-  ActionSource,
-  Decision,
-  Approval,
-  FirewallStats,
-  UntrustedContent,
+import {
+  type ActionRequest,
+  type ActionSource,
+  type Decision,
+  type Approval,
+  type FirewallStats,
+  type UntrustedContent,
+  DecisionSchema,
+  ApprovalSchema,
 } from '@veto/contracts';
 import {
   VetoError,
@@ -198,28 +200,34 @@ export class Veto {
       timestamp: new Date().toISOString(),
     };
 
-    const decision = await this.request<Decision>('/v1/check', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    const decision = await this.check(payload);
 
-    // 1. Policy Blocked
-    if (decision.verdict === 'block') {
-      throw new VetoBlockError(decision);
-    }
+    // Explicit Fail-Closed Matching: ONLY explicit 'allow' permits tool execution!
+    switch (decision.verdict) {
+      case 'allow':
+        return decision;
 
-    // 2. Policy Required Human Approval
-    if (decision.verdict === 'needs_approval') {
-      if (!decision.approvalId) {
-        throw new VetoError('Firewall required approval but returned no approvalId');
+      case 'block':
+        throw new VetoBlockError(decision);
+
+      case 'needs_approval': {
+        if (!decision.approvalId) {
+          throw new VetoError('Firewall required approval but returned no approvalId');
+        }
+
+        const approval = await this.waitForApproval(decision.approvalId);
+        if (approval.state !== 'approved') {
+          throw new VetoApprovalDeniedError(approval);
+        }
+
+        return decision;
       }
 
-      // Automatically wait for the human operator to resolve the ticket
-      await this.waitForApproval(decision.approvalId);
+      default:
+        throw new VetoError(
+          `Security Violation: Unrecognized firewall verdict "${(decision as any)?.verdict}". Failing closed.`,
+        );
     }
-
-    // 3. Policy Allowed (or Human Approved)
-    return decision;
   }
 
   /**
@@ -250,7 +258,14 @@ export class Veto {
    * Retrieves the current state of an approval ticket.
    */
   public async getApproval(approvalId: string): Promise<Approval> {
-    return this.request<Approval>(`/v1/approvals/${approvalId}`);
+    const raw = await this.request<unknown>(`/v1/approvals/${approvalId}`);
+    const parsed = ApprovalSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new VetoError(
+        `Invalid approval schema received from Veto Firewall: ${parsed.error.message}`,
+      );
+    }
+    return parsed.data;
   }
 
   /**
@@ -286,6 +301,11 @@ export class Veto {
       if (approval.state === 'denied') {
         throw new VetoApprovalDeniedError(approval);
       }
+      if (approval.state !== 'pending') {
+        throw new VetoError(
+          `Security Violation: Unrecognized approval state "${approval.state}". Failing closed.`,
+        );
+      }
 
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
@@ -295,12 +315,22 @@ export class Veto {
 
   /**
    * Raw low-level check endpoint returning the Decision without throwing or waiting.
+   * Validates the response against DecisionSchema at runtime.
    */
   public async check(request: ActionRequest): Promise<Decision> {
-    return this.request<Decision>('/v1/check', {
+    const raw = await this.request<unknown>('/v1/check', {
       method: 'POST',
       body: JSON.stringify(request),
     });
+
+    const parsed = DecisionSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new VetoError(
+        `Invalid decision schema received from Veto Firewall: ${parsed.error.message}`,
+      );
+    }
+
+    return parsed.data;
   }
 
   /**

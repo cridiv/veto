@@ -10,7 +10,8 @@
     "test:unit": "pnpm --filter backend test",
     "test:e2e": "pnpm --filter backend test:e2e",
     "test:live": "node scripts/e2e-live-test.mjs",
-    "test:sdk": "node scripts/demo-sdk.mjs"
+    "test:sdk": "node scripts/demo-sdk.mjs",
+    "start:acme": "pnpm --filter @veto/acme start"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

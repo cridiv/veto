@@ -4,7 +4,6 @@
 # ------------------------------------------------------------------------------
 
 context:
-  # Optional whitelist of verified transfer recipients
   known_recipients:
     - "PHCN"
     - "Supplier Ltd"
@@ -21,9 +20,29 @@ policies:
         - read_inbox
         - read_file
         - list_files
+        - get_balance
+        - read_article
     action: allow
 
-  # 2. Hourly spending cap for Acme Assistant
+  # 2. Allow outbound reports ONLY to authorized internal corporate destinations
+  - name: allow-internal-reports
+    description: "Allow dispatching reports to approved internal corporate endpoints"
+    match:
+      agents: ["*"]
+      tools: [send_report]
+    when: 'args.destination startswith "https://internal.acme.com/"'
+    action: allow
+
+  # 3. Block unauthorized outbound exfiltration of reports to external sinks
+  - name: block-external-data-exfiltration
+    description: "Prevent data exfiltration to unapproved external endpoints"
+    match:
+      agents: ["*"]
+      tools: [send_report]
+    when: 'not args.destination startswith "https://internal.acme.com/"'
+    action: block
+
+  # 4. Hourly spending cap for Acme Assistant
   - name: acme-hourly-transfer-cap
     description: "Limit cumulative transfers to ₦300,000 per hour"
     match:
@@ -35,7 +54,7 @@ policies:
       max: 300000
     action: require_approval
 
-  # 3. Require human approval on large single transfers
+  # 5. Require human approval on large single transfers
   - name: acme-large-transfers
     description: "Require approval for single transfers exceeding ₦100,000"
     match:
@@ -44,7 +63,7 @@ policies:
     when: "args.amount > 100000"
     action: require_approval
 
-  # 4. Require approval for new / unverified recipients
+  # 6. Require approval for new / unverified recipients
   - name: acme-unverified-recipients
     description: "Require approval when sending funds to unlisted accounts"
     match:
@@ -53,7 +72,7 @@ policies:
     when: "args.to not in context.known_recipients"
     action: require_approval
 
-  # 5. Allow standard transfers to verified recipients under single-transfer threshold
+  # 7. Allow standard transfers to verified recipients under single-transfer threshold
   - name: acme-verified-transfers
     description: "Allow small transfers to known recipients with zero friction"
     match:
@@ -62,7 +81,7 @@ policies:
     when: "args.to in context.known_recipients"
     action: allow
 
-  # 6. Prevent file deletions outside sandbox
+  # 8. Prevent file deletions outside sandbox
   - name: block-sandbox-escape-deletion
     description: "Prevent destructive file deletions outside permitted workspace"
     match:
@@ -70,7 +89,7 @@ policies:
     when: 'not args.path startswith "/workspace/"'
     action: block
 
-  # 7. Rate-limit file deletions for DevOps / CI bot
+  # 9. Rate-limit file deletions for DevOps / CI bot
   - name: devops-deletion-rate-limit
     description: "Limit deletions to at most 3 calls per 10 minutes"
     match:
@@ -81,7 +100,7 @@ policies:
       count: 3
     action: block
 
-  # 8. Allow workspace deletions within rate limit
+  # 10. Allow workspace deletions within rate limit
   - name: devops-allow-workspace-deletion
     description: "Allow DevOps and CI bots to clean workspace temp files within rate limit"
     match:
@@ -90,11 +109,9 @@ policies:
     when: 'args.path startswith "/workspace/"'
     action: allow
 
-  # 9. Zero-Trust Default-Deny: Any tool not explicitly whitelisted above is blocked
+  # 11. Zero-Trust Default-Deny: Any tool not explicitly whitelisted above is blocked
   - name: default-deny-unwhitelisted-actions
     description: "Zero-Trust default: Block any tool call not explicitly whitelisted"
     match:
       tools: ["*"]
     action: block
-
-
