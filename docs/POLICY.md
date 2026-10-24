@@ -515,5 +515,7 @@ Once a `block` is set, it cannot be undone. This is by design.
 
 ---
 
-*For expression evaluator internals, see [`backend/src/engine/evaluators/rule-evaluator.ts`](../backend/src/engine/evaluators/rule-evaluator.ts).
+*For client integration and tool wrapping, see the [TypeScript SDK Guide](SDK.md).
+For expression evaluator internals, see [`backend/src/engine/evaluators/rule-evaluator.ts`](../backend/src/engine/evaluators/rule-evaluator.ts).
 For the quota sliding-window implementation, see [`backend/src/db/evaluators/quota-evaluator.ts`](../backend/src/db/evaluators/quota-evaluator.ts).*
+
