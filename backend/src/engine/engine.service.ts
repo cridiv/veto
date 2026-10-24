@@ -50,8 +50,23 @@ export class PolicyEngineService {
       `Evaluating ${request.agentId}/${request.tool} — ${rules.length} candidate rule(s)`,
     );
 
-    let verdict: DecisionVerdict = 'allow';
-    let reason = 'No matching policy rule — action permitted by default.';
+    // ── Zero-Trust Check 1: Tool must be whitelisted for this agent ────────
+    if (rules.length === 0) {
+      this.logger.warn(
+        `Zero-Trust Block: Tool "${request.tool}" is not whitelisted for agent "${request.agentId}".`,
+      );
+      return {
+        requestId: request.id,
+        verdict: 'block',
+        reason: `Zero-Trust Policy Violation: Tool "${request.tool}" is not whitelisted for agent "${request.agentId}".`,
+        layer: 'rule',
+        riskScore: 1.0,
+      };
+    }
+
+    let explicitlyPermitted = false;
+    let verdict: DecisionVerdict = 'block';
+    let reason = `Zero-Trust Policy Violation: Action not permitted by any whitelist rule for agent "${request.agentId}".`;
     let matchedRule: string | undefined;
     let layer: Decision['layer'] = 'rule';
 
@@ -97,48 +112,48 @@ export class PolicyEngineService {
 
         if (quotaResult.exceeded) {
           const candidate = this.policyActionToVerdict(rule.action);
-          if (VERDICT_SEVERITY[candidate] > VERDICT_SEVERITY[verdict]) {
-            verdict = candidate;
-            reason = `Quota exceeded for rule "${rule.name}": ${quotaResult.currentValue} / ${quotaResult.limit} within ${rule.quota.window}.`;
-            matchedRule = rule.name;
-            layer = 'quota';
+          verdict = candidate;
+          reason = `Quota exceeded for rule "${rule.name}": ${quotaResult.currentValue} / ${quotaResult.limit} within ${rule.quota.window}.`;
+          matchedRule = rule.name;
+          layer = 'quota';
+          explicitlyPermitted = true;
 
-            this.logger.log(`Quota hit — rule: "${rule.name}", verdict: ${verdict}`);
-
-            // Quota block is final — no later rule can loosen it
-            if (verdict === 'block') break;
-          }
+          this.logger.log(`Quota hit — rule: "${rule.name}", verdict: ${verdict}`);
+          break;
         }
 
-        // Quota rule always ends here — never fall through to Layer 3
+        // Quota not exceeded — continue to find matching whitelist allow/escalate rule
         continue;
       }
 
       // ── Layer 3: action directive ─────────────────────────────────────────
       const actionVerdict = this.policyActionToVerdict(rule.action);
+      verdict = actionVerdict;
+      reason = `Rule "${rule.name}" matched — ${rule.description ?? rule.action}.`;
+      matchedRule = rule.name;
+      layer = rule.action === 'judge' ? 'judge' : 'rule';
+      explicitlyPermitted = true;
 
-      // Explicit first-match-wins allow
-      if (rule.action === 'allow' && verdict === 'allow') {
-        reason = `Rule "${rule.name}" matched — ${rule.description ?? rule.action}.`;
-        matchedRule = rule.name;
-        layer = 'rule';
-        break;
-      }
+      this.logger.log(
+        `Rule "${rule.name}" — action: ${rule.action}, verdict: ${verdict}`,
+      );
 
-      // Strict tightening ratchet: only update verdict and attribution if strictly stricter
-      if (VERDICT_SEVERITY[actionVerdict] > VERDICT_SEVERITY[verdict]) {
-        verdict = actionVerdict;
-        reason = `Rule "${rule.name}" matched — ${rule.description ?? rule.action}.`;
-        matchedRule = rule.name;
-        layer = rule.action === 'judge' ? 'judge' : 'rule';
+      // First matching whitelist rule determines baseline policy verdict
+      break;
+    }
 
-        this.logger.log(
-          `Rule "${rule.name}" — action: ${rule.action}, verdict: ${verdict}`,
-        );
-
-        // A block is final — stop evaluating further rules
-        if (verdict === 'block') break;
-      }
+    // ── Zero-Trust Check 2: If no rule whitelisted this action, block ────────
+    if (!explicitlyPermitted) {
+      this.logger.warn(
+        `Zero-Trust Block: Tool "${request.tool}" not explicitly permitted by any policy rule for "${request.agentId}".`,
+      );
+      return {
+        requestId: request.id,
+        verdict: 'block',
+        reason: `Zero-Trust Policy Violation: Tool "${request.tool}" is not whitelisted for agent "${request.agentId}".`,
+        layer: 'rule',
+        riskScore: 1.0,
+      };
     }
 
     // ── Layer 4: Structural Syntax Anomalies ─────────────────────────────────

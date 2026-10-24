@@ -70,11 +70,11 @@ policies:
     when: 'not args.path startswith "/workspace/"'
     action: block
 
-  # 7. Rate-limit file deletions for DevOps bot
+  # 7. Rate-limit file deletions for DevOps / CI bot
   - name: devops-deletion-rate-limit
     description: "Limit deletions to at most 3 calls per 10 minutes"
     match:
-      agents: [devops-bot]
+      agents: [devops-bot, ci-bot]
       tools: [delete_files]
     quota:
       window: 10m
@@ -83,17 +83,18 @@ policies:
 
   # 8. Allow workspace deletions within rate limit
   - name: devops-allow-workspace-deletion
-    description: "Allow DevOps bot to clean workspace temp files within rate limit"
+    description: "Allow DevOps and CI bots to clean workspace temp files within rate limit"
     match:
-      agents: [devops-bot]
+      agents: [devops-bot, ci-bot]
       tools: [delete_files]
     when: 'args.path startswith "/workspace/"'
     action: allow
 
-  # 9. Fallback: Unsettled side-effecting actions go to the LLM judge
-  - name: default-unmatched-actions
-    description: "Route unmatched tools to the LLM Intent Judge"
+  # 9. Zero-Trust Default-Deny: Any tool not explicitly whitelisted above is blocked
+  - name: default-deny-unwhitelisted-actions
+    description: "Zero-Trust default: Block any tool call not explicitly whitelisted"
     match:
       tools: ["*"]
-    action: judge
+    action: block
+
 

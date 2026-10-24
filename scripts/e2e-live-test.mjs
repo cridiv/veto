@@ -280,8 +280,33 @@ async function run() {
     assert(benignRes.data.verdict === 'allow', `Benign pipe in text is ALLOWED (got: ${benignRes.data.verdict})`);
   }
 
-  // ── Scenario 9: System Metrics & Audit Trail ────────────────────────────────
-  console.log(`\n${colors.bright}${colors.magenta}Scenario 9: Audit Trail & Aggregated Statistics${colors.reset}`);
+  // ── Scenario 9: Zero-Trust Default-Deny (Unwhitelisted Tools) ───────────────
+  console.log(`\n${colors.bright}${colors.magenta}Scenario 9: Zero-Trust Default-Deny (Unwhitelisted Tools)${colors.reset}`);
+  {
+    const unauthReq = {
+      id: `live-unwhitelisted-${Date.now()}`,
+      agentId: 'acme-assistant',
+      sessionId: 'live-sess-zt',
+      userGoal: 'Attempt to execute arbitrary system shell',
+      tool: 'execute_bash',
+      args: { cmd: 'whoami' },
+      source: 'agent',
+      timestamp: new Date().toISOString(),
+    };
+
+    const res = await api('/v1/check', { method: 'POST', body: JSON.stringify(unauthReq) });
+    assert(res.data.verdict === 'block', `Unwhitelisted tool is BLOCKED (got: ${res.data.verdict})`);
+    assert(res.data.layer === 'rule', `Evaluated by layer RULE (got: ${res.data.layer})`);
+    assert(res.data.riskScore === 1.0, `Zero-Trust maximum risk score 1.0 assigned (got: ${res.data.riskScore})`);
+    assert(
+      res.data.matchedRule === 'default-deny-unwhitelisted-actions' || res.data.reason.includes('Zero-Trust'),
+      `Zero-Trust violation recorded: ${res.data.reason}`,
+    );
+    assert(!res.data.approvalId, 'No approval ticket created for zero-trust blocks');
+  }
+
+  // ── Scenario 10: System Metrics & Audit Trail ───────────────────────────────
+  console.log(`\n${colors.bright}${colors.magenta}Scenario 10: Audit Trail & Aggregated Statistics${colors.reset}`);
   {
     const statsRes = await api('/v1/stats');
     assert(statsRes.ok, 'GET /v1/stats returns 200 OK');

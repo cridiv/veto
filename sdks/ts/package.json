@@ -1,0 +1,22 @@
+{
+  "name": "@veto/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript SDK for the Veto AI Agent Security Firewall",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "veto": "./bin/veto.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@veto/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.13.1"
+  }
+}

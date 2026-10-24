@@ -9,7 +9,8 @@
     "test": "pnpm --filter backend test && pnpm --filter backend test:e2e",
     "test:unit": "pnpm --filter backend test",
     "test:e2e": "pnpm --filter backend test:e2e",
-    "test:live": "node scripts/e2e-live-test.mjs"
+    "test:live": "node scripts/e2e-live-test.mjs",
+    "test:sdk": "node scripts/demo-sdk.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

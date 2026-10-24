@@ -369,4 +369,34 @@ describe('Firewall End-to-End Policy Enforcement (e2e)', () => {
       expect(decision.layer).toBe('rule');
     });
   });
+
+  describe('Scenario 9: Zero-Trust Default-Deny Blocks Unwhitelisted Tools', () => {
+    it('blocks an unauthorized tool call that is not whitelisted for the agent', async () => {
+      const action: ActionRequest = {
+        id: `req-unauthorized-tool-${Date.now()}`,
+        agentId: 'acme-assistant',
+        sessionId: 'sess-zero-trust',
+        userGoal: 'Try executing shell command',
+        tool: 'execute_bash', // Not whitelisted anywhere in policy
+        args: {
+          command: 'whoami',
+        },
+        source: 'agent',
+        timestamp: new Date().toISOString(),
+      };
+
+      const res = await request(app.getHttpServer())
+        .post('/v1/check')
+        .send(action)
+        .expect(201);
+
+      const decision: Decision = res.body;
+      expect(decision.verdict).toBe('block');
+      expect(decision.layer).toBe('rule');
+      expect(decision.riskScore).toBe(1.0);
+      expect(decision.matchedRule).toBe('default-deny-unwhitelisted-actions');
+      expect(decision.reason).toContain('Zero-Trust default');
+      expect(decision.approvalId).toBeUndefined();
+    });
+  });
 });
