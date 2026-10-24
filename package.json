@@ -5,7 +5,11 @@
   "description": "Veto - Real-time AI Agent Firewall",
   "scripts": {
     "build": "pnpm -r run build",
-    "clean": "pnpm -r run clean"
+    "clean": "pnpm -r run clean",
+    "test": "pnpm --filter backend test && pnpm --filter backend test:e2e",
+    "test:unit": "pnpm --filter backend test",
+    "test:e2e": "pnpm --filter backend test:e2e",
+    "test:live": "node scripts/e2e-live-test.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

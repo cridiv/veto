@@ -95,15 +95,17 @@ export class PolicyEngineService {
 
         if (quotaResult.exceeded) {
           const candidate = this.policyActionToVerdict(rule.action);
-          verdict = tighten(verdict, candidate);
-          reason = `Quota exceeded for rule "${rule.name}": ${quotaResult.currentValue} / ${quotaResult.limit} within ${rule.quota.window}.`;
-          matchedRule = rule.name;
-          layer = 'quota';
+          if (VERDICT_SEVERITY[candidate] > VERDICT_SEVERITY[verdict]) {
+            verdict = candidate;
+            reason = `Quota exceeded for rule "${rule.name}": ${quotaResult.currentValue} / ${quotaResult.limit} within ${rule.quota.window}.`;
+            matchedRule = rule.name;
+            layer = 'quota';
 
-          this.logger.log(`Quota hit — rule: "${rule.name}", verdict: ${verdict}`);
+            this.logger.log(`Quota hit — rule: "${rule.name}", verdict: ${verdict}`);
 
-          // Quota block is final — no later rule can loosen it
-          if (verdict === 'block') break;
+            // Quota block is final — no later rule can loosen it
+            if (verdict === 'block') break;
+          }
         }
 
         // Quota rule always ends here — never fall through to Layer 3
@@ -112,22 +114,29 @@ export class PolicyEngineService {
 
       // ── Layer 3: action directive ─────────────────────────────────────────
       const actionVerdict = this.policyActionToVerdict(rule.action);
-      verdict = tighten(verdict, actionVerdict);
 
-      // Always record attribution for the firing rule
-      reason = `Rule "${rule.name}" matched — ${rule.description ?? rule.action}.`;
-      matchedRule = rule.name;
-      layer = rule.action === 'judge' ? 'judge' : 'rule';
+      // Explicit first-match-wins allow
+      if (rule.action === 'allow' && verdict === 'allow') {
+        reason = `Rule "${rule.name}" matched — ${rule.description ?? rule.action}.`;
+        matchedRule = rule.name;
+        layer = 'rule';
+        break;
+      }
 
-      this.logger.log(
-        `Rule "${rule.name}" — action: ${rule.action}, verdict: ${verdict}`,
-      );
+      // Strict tightening ratchet: only update verdict and attribution if strictly stricter
+      if (VERDICT_SEVERITY[actionVerdict] > VERDICT_SEVERITY[verdict]) {
+        verdict = actionVerdict;
+        reason = `Rule "${rule.name}" matched — ${rule.description ?? rule.action}.`;
+        matchedRule = rule.name;
+        layer = rule.action === 'judge' ? 'judge' : 'rule';
 
-      // A block is final — stop evaluating further rules
-      if (verdict === 'block') break;
+        this.logger.log(
+          `Rule "${rule.name}" — action: ${rule.action}, verdict: ${verdict}`,
+        );
 
-      // An explicit allow terminates immediately (first-match-wins)
-      if (rule.action === 'allow') break;
+        // A block is final — stop evaluating further rules
+        if (verdict === 'block') break;
+      }
     }
 
     const decision: Decision = {

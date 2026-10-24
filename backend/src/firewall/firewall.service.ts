@@ -19,6 +19,7 @@ import { ActionsRepository } from '../db/repositories/actions.repository';
 import { ApprovalsRepository } from '../db/repositories/approvals.repository';
 import { StatsRepository } from '../db/repositories/stats.repository';
 import { PolicyEngineService } from '../engine/engine.service';
+import { randomUUID } from 'crypto';
 
 export type FirewallEvent = {
   type: 'action_checked' | 'approval_created' | 'approval_resolved' | 'mode_changed';
@@ -70,7 +71,15 @@ export class FirewallService {
 
     // 3. If escalated, open an approval queue item
     if (decision.verdict === 'needs_approval') {
+      const approvalId = randomUUID();
+      decision.approvalId = approvalId;
+
+      // 1. Persist the action first so FK constraint (approvals.request_id -> actions.id) is satisfied
+      this.recordAndEmit(request, decision);
+
+      // 2. Create the approval record
       const approval = this.approvalsRepo.create({
+        id: approvalId,
         requestId: request.id,
         agentId: request.agentId,
         tool: request.tool,
@@ -78,8 +87,9 @@ export class FirewallService {
         userGoal: request.userGoal,
         reason: decision.reason,
       });
-      decision.approvalId = approval.id;
+
       this.emitEvent('approval_created', approval);
+      return decision;
     }
 
     this.recordAndEmit(request, decision);

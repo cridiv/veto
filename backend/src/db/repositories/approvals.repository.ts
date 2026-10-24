@@ -4,6 +4,7 @@ import type { Approval, ApprovalState } from '@veto/contracts';
 import { randomUUID } from 'crypto';
 
 type CreateApprovalPayload = {
+  id?: string;
   requestId: string;
   agentId: string;
   tool: string;
@@ -23,7 +24,7 @@ export class ApprovalsRepository {
 
   create(payload: CreateApprovalPayload): Approval {
     const approval: Approval = {
-      id: randomUUID(),
+      id: payload.id ?? randomUUID(),
       requestId: payload.requestId,
       agentId: payload.agentId,
       tool: payload.tool,

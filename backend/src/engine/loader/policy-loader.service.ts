@@ -8,15 +8,36 @@ import { PolicyConfigSchema, type PolicyConfig, type PolicyRule } from '@veto/co
 export class PolicyLoaderService implements OnModuleInit {
   private readonly logger = new Logger(PolicyLoaderService.name);
   private policyConfig: PolicyConfig = { policies: [] };
+  private lastMtimeMs = 0;
+  private isLoadedFromString = false;
 
   onModuleInit() {
     this.loadPolicy();
   }
 
   /**
+   * Reloads policy if modified on disk.
+   */
+  reloadIfModified(): void {
+    if (this.isLoadedFromString) return;
+    const policyPath = this.resolvePolicyPath();
+    if (!fs.existsSync(policyPath)) return;
+    try {
+      const stat = fs.statSync(policyPath);
+      if (stat.mtimeMs !== this.lastMtimeMs) {
+        this.logger.log(`Policy file changed on disk (mtime: ${stat.mtimeMs}), reloading...`);
+        this.loadPolicy();
+      }
+    } catch {
+      // Ignore concurrent read errors
+    }
+  }
+
+  /**
    * Loads and validates the policy file from disk on startup.
    */
   loadPolicy(): PolicyConfig {
+    this.isLoadedFromString = false;
     const policyPath = this.resolvePolicyPath();
     this.logger.log(`Loading security policy from: ${policyPath}`);
 
@@ -26,14 +47,26 @@ export class PolicyLoaderService implements OnModuleInit {
       return this.policyConfig;
     }
 
+    try {
+      const stat = fs.statSync(policyPath);
+      this.lastMtimeMs = stat.mtimeMs;
+    } catch {
+      // Ignore stat error
+    }
+
     const rawContent = fs.readFileSync(policyPath, 'utf8');
-    return this.loadPolicyFromString(rawContent);
+    return this.loadPolicyFromStringInternal(rawContent);
   }
 
   /**
    * Parses raw YAML text and validates it against PolicyConfigSchema.
    */
   loadPolicyFromString(rawYaml: string): PolicyConfig {
+    this.isLoadedFromString = true;
+    return this.loadPolicyFromStringInternal(rawYaml);
+  }
+
+  private loadPolicyFromStringInternal(rawYaml: string): PolicyConfig {
     let parsedJson: unknown;
     try {
       parsedJson = yaml.load(rawYaml);
@@ -60,6 +93,7 @@ export class PolicyLoaderService implements OnModuleInit {
    * Returns all policies in memory.
    */
   getConfig(): PolicyConfig {
+    this.reloadIfModified();
     return this.policyConfig;
   }
 
@@ -67,6 +101,7 @@ export class PolicyLoaderService implements OnModuleInit {
    * Returns the global context dictionary (e.g. known_recipients).
    */
   getContext(): Record<string, unknown> {
+    this.reloadIfModified();
     return this.policyConfig.context ?? {};
   }
 
@@ -75,6 +110,7 @@ export class PolicyLoaderService implements OnModuleInit {
    * preserving the exact top-to-bottom priority order from the YAML file.
    */
   getRulesForAction(agentId: string, tool: string): PolicyRule[] {
+    this.reloadIfModified();
     return this.policyConfig.policies.filter((rule) => {
       // 1. Agent Match: Matches if agents is omitted, contains "*", or contains agentId
       const agentList = rule.match.agents ?? ['*'];

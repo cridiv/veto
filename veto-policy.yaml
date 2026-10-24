@@ -53,7 +53,16 @@ policies:
     when: "args.to not in context.known_recipients"
     action: require_approval
 
-  # 5. Prevent file deletions outside sandbox
+  # 5. Allow standard transfers to verified recipients under single-transfer threshold
+  - name: acme-verified-transfers
+    description: "Allow small transfers to known recipients with zero friction"
+    match:
+      agents: [acme-assistant]
+      tools: [transfer_money]
+    when: "args.to in context.known_recipients"
+    action: allow
+
+  # 6. Prevent file deletions outside sandbox
   - name: block-sandbox-escape-deletion
     description: "Prevent destructive file deletions outside permitted workspace"
     match:
@@ -61,7 +70,7 @@ policies:
     when: 'not args.path startswith "/workspace/"'
     action: block
 
-  # 6. Rate-limit file deletions for DevOps bot
+  # 7. Rate-limit file deletions for DevOps bot
   - name: devops-deletion-rate-limit
     description: "Limit deletions to at most 3 calls per 10 minutes"
     match:
@@ -72,9 +81,19 @@ policies:
       count: 3
     action: block
 
-  # 7. Fallback: Unsettled side-effecting actions go to the LLM judge
+  # 8. Allow workspace deletions within rate limit
+  - name: devops-allow-workspace-deletion
+    description: "Allow DevOps bot to clean workspace temp files within rate limit"
+    match:
+      agents: [devops-bot]
+      tools: [delete_files]
+    when: 'args.path startswith "/workspace/"'
+    action: allow
+
+  # 9. Fallback: Unsettled side-effecting actions go to the LLM judge
   - name: default-unmatched-actions
     description: "Route unmatched tools to the LLM Intent Judge"
     match:
       tools: ["*"]
     action: judge
+
