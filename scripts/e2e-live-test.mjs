@@ -221,8 +221,67 @@ async function run() {
     }
   }
 
-  // ── Scenario 6: System Metrics & Audit Trail ────────────────────────────────
-  console.log(`\n${colors.bright}${colors.magenta}Scenario 6: Audit Trail & Aggregated Statistics${colors.reset}`);
+  // ── Scenario 7: Data Provenance (Taint Tracking) ───────────────────────────
+  console.log(`\n${colors.bright}${colors.magenta}Scenario 7: Data Provenance (Taint Tracking)${colors.reset}`);
+  {
+    const req = {
+      id: `live-taint-${Date.now()}`,
+      agentId: 'acme-assistant',
+      sessionId: 'live-sess-taint',
+      userGoal: 'Process invoice email',
+      tool: 'transfer_money',
+      args: { to: 'Supplier Ltd', amount: 5000 },
+      source: 'agent',
+      untrusted: [
+        {
+          source: 'inbound_invoice_email',
+          excerpt: 'Please send payment directly to Supplier Ltd today.',
+        },
+      ],
+      timestamp: new Date().toISOString(),
+    };
+    const res = await api('/v1/check', { method: 'POST', body: JSON.stringify(req) });
+    assert(res.data.verdict === 'needs_approval', `Tainted transfer escalates to NEEDS_APPROVAL (got: ${res.data.verdict})`);
+    assert(res.data.layer === 'taint', `Caught by layer TAINT (got: ${res.data.layer})`);
+    assert(res.data.reason.includes('Taint detected'), `Clear provenance reason message: ${res.data.reason}`);
+  }
+
+  // ── Scenario 8: Structural Command Injection & Benign Pipe Handling ────────
+  console.log(`\n${colors.bright}${colors.magenta}Scenario 8: Structural Anomaly & Benign Pipe Handling${colors.reset}`);
+  {
+    // Malicious Command Injection
+    const badReq = {
+      id: `live-inject-${Date.now()}`,
+      agentId: 'ci-bot',
+      sessionId: 'live-sess-inject',
+      userGoal: 'Clean directory',
+      tool: 'delete_files',
+      args: { path: '/workspace/app.log; rm -rf /workspace' },
+      source: 'agent',
+      timestamp: new Date().toISOString(),
+    };
+    const badRes = await api('/v1/check', { method: 'POST', body: JSON.stringify(badReq) });
+    assert(badRes.data.verdict === 'block', `Command injection is BLOCKED (got: ${badRes.data.verdict})`);
+    assert(badRes.data.layer === 'risk', `Caught by layer RISK (got: ${badRes.data.layer})`);
+    assert(badRes.data.reason.includes('command injection'), `Descriptive reason: ${badRes.data.reason}`);
+
+    // Benign Pipe in email text
+    const benignReq = {
+      id: `live-benign-pipe-${Date.now()}`,
+      agentId: 'acme-assistant',
+      sessionId: 'live-sess-benign',
+      userGoal: 'Check emails',
+      tool: 'read_inbox',
+      args: { subject: 'Weekly Status | Q3 Report', query: 'status:unread | urgent' },
+      source: 'agent',
+      timestamp: new Date().toISOString(),
+    };
+    const benignRes = await api('/v1/check', { method: 'POST', body: JSON.stringify(benignReq) });
+    assert(benignRes.data.verdict === 'allow', `Benign pipe in text is ALLOWED (got: ${benignRes.data.verdict})`);
+  }
+
+  // ── Scenario 9: System Metrics & Audit Trail ────────────────────────────────
+  console.log(`\n${colors.bright}${colors.magenta}Scenario 9: Audit Trail & Aggregated Statistics${colors.reset}`);
   {
     const statsRes = await api('/v1/stats');
     assert(statsRes.ok, 'GET /v1/stats returns 200 OK');
@@ -233,6 +292,8 @@ async function run() {
     assert(s.escalated > 0, `Escalated actions: ${s.escalated}`);
     assert(s.byLayer.rule > 0, `Rule-evaluated actions: ${s.byLayer.rule}`);
     assert(s.byLayer.quota > 0, `Quota-evaluated actions: ${s.byLayer.quota}`);
+    assert(s.byLayer.taint > 0, `Taint-evaluated actions: ${s.byLayer.taint}`);
+    assert(s.byLayer.risk > 0, `Risk-evaluated actions: ${s.byLayer.risk}`);
 
     const logsRes = await api('/v1/actions?limit=5');
     assert(logsRes.ok && Array.isArray(logsRes.data), 'GET /v1/actions returns recent audit entries');

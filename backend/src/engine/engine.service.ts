@@ -3,6 +3,8 @@ import type { ActionRequest, Decision, DecisionVerdict, PolicyRule } from '@veto
 import { PolicyLoaderService } from './loader/policy-loader.service';
 import { ruleApplies } from './evaluators/rule-evaluator';
 import { checkQuota } from '../db/evaluators/quota-evaluator';
+import { evaluateStructure } from './evaluators/structure-evaluator';
+import { evaluateTaint } from './evaluators/taint-evaluator';
 import { DatabaseService } from '../db/database.service';
 
 /**
@@ -139,12 +141,46 @@ export class PolicyEngineService {
       }
     }
 
+    // ── Layer 4: Structural Syntax Anomalies ─────────────────────────────────
+    if (verdict !== 'block') {
+      const structResult = evaluateStructure(request);
+      if (structResult.hasAnomaly) {
+        const candidate: DecisionVerdict =
+          structResult.anomalyType === 'command_injection' ? 'block' : 'needs_approval';
+
+        if (VERDICT_SEVERITY[candidate] > VERDICT_SEVERITY[verdict]) {
+          verdict = candidate;
+          reason = structResult.message ?? 'Structural syntax anomaly detected.';
+          layer = 'risk';
+          matchedRule = undefined;
+
+          this.logger.warn(`Structural anomaly detected (${structResult.anomalyType}) — ${reason}`);
+        }
+      }
+    }
+
+    // ── Layer 5: Data Provenance (Taint Tracking) ───────────────────────────
+    if (verdict !== 'block') {
+      const taintResult = evaluateTaint(request);
+      if (taintResult.isTainted) {
+        const candidate: DecisionVerdict = 'needs_approval';
+        if (VERDICT_SEVERITY[candidate] > VERDICT_SEVERITY[verdict]) {
+          verdict = candidate;
+          reason = taintResult.message ?? 'Data taint detected from untrusted source.';
+          layer = 'taint';
+          matchedRule = undefined;
+
+          this.logger.warn(`Data taint detected — ${reason}`);
+        }
+      }
+    }
+
     const decision: Decision = {
       requestId: request.id,
       verdict,
       reason,
       layer,
-      riskScore: this.computeRiskScore(verdict),
+      riskScore: this.computeRiskScore(verdict, layer),
       matchedRule,
     };
 
@@ -191,9 +227,11 @@ export class PolicyEngineService {
   }
 
   /**
-   * Simple risk score mapping for dashboard metrics.
+   * Risk score mapping for dashboard metrics.
    */
-  private computeRiskScore(verdict: DecisionVerdict): number {
+  private computeRiskScore(verdict: DecisionVerdict, layer: Decision['layer']): number {
+    if (layer === 'risk') return 0.9;
+    if (layer === 'taint') return 0.7;
     switch (verdict) {
       case 'allow':          return 0.0;
       case 'needs_approval': return 0.5;
